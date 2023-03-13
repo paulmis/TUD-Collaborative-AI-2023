@@ -69,6 +69,7 @@ class BaselineAgent(ArtificialBrain):
         self._rescue = None
         self._recentVic = None
         self._receivedMessages = []
+        self.processedMessages = []
         self._moving = False
 
     def initialize(self):
@@ -675,22 +676,25 @@ class BaselineAgent(ArtificialBrain):
         process incoming messages received from the team members
         '''
         
-        receivedMessages = {}
         # Create a dictionary with a list of received messages from each team member
+        receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
+                    
         # Check the content of the received messages
         for mssgs in receivedMessages.values():
             for msg in mssgs:
+                
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored
                 if msg.startswith("Search:"):
                     area = 'area ' + msg.split()[-1]
                     if area not in self._searchedRooms:
                         self._searchedRooms.append(area)
+
                 # If a received message involves team members finding victims, add these victims and their locations to memory
                 if msg.startswith("Found:"):
                     # Identify which victim and area it concerns
@@ -714,6 +718,7 @@ class BaselineAgent(ArtificialBrain):
                     # Add the found victim to the to do list when the human's condition is not 'weak'
                     if 'mild' in foundVic and condition!='weak':
                         self._todo.append(foundVic)
+
                 # If a received message involves team members rescuing victims, add these victims and their locations to memory
                 if msg.startswith('Collect:'):
                     # Identify which victim and area it concerns
@@ -737,6 +742,7 @@ class BaselineAgent(ArtificialBrain):
                     # Decide to help the human carry the victim together when the human's condition is weak
                     if condition=='weak':
                         self._rescue = 'together'
+
                 # If a received message involves team members asking for help with removing obstacles, add their location to memory and come over
                 if msg.startswith('Remove:'):
                     # Come over immediately when the agent is not carrying a victim
@@ -763,9 +769,14 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         area = 'area ' + msg.split()[-1]
                         self._sendMessage('Will come to ' + area + ' after dropping ' + self._goalVic + '.','RescueBot')
+
             # Store the current location of the human in memory
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
+
+        # Mark the mesagess as processed
+        self.processed_messages.append(self.received_messages)
+        self.received_messages = []
 
     def _loadBelief(self, members, folder):
         '''
