@@ -14,6 +14,7 @@ from matrx.actions.move_actions import MoveNorth
 from matrx.messages.message import Message
 from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
+from .intent import Intent
 
 class Phase(enum.Enum):
     INTRO = 1,
@@ -809,13 +810,14 @@ class BaselineAgent(ArtificialBrain):
         '''
 
         # Base trust belief system variables
-        intention_types = ["Search", "Found", "Collect"]
+        intention_types = ["Search", "Found", "Collect", "Remove together"]
         positive_modifier = 0.1
         neutral_modifier = 0
         negative_modifier = -0.1
 
         # Create action history structure
-        intentHistory: dict[str, list[int]] = {}
+        # Intent type to the list of intents
+        intentHistory: dict[str, list[Intent]] = {}
         for intent_type in intention_types:
             intentHistory[intent_type] = []
 
@@ -823,24 +825,40 @@ class BaselineAgent(ArtificialBrain):
         for message in receivedMessages:
             # Remember intentions to execute a search/collect/remove actions
             message_type = message.split(":")[0]
-            if any(message_type in intention_type for intention_type in intention_types):
-                intentHistory[message_type].append(int(message.split()[-1]))
+            if any(message_type in intention_type 
+                   for intention_type in ["Search", "Found", "Collect"]):
+                intentHistory[message_type].append(Intent(
+                    message_type,
+                    int(message.split()[-1])
+                ))
 
-            # Increase agent trust in a team member that rescued a victim
-            if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence'] += positive_modifier
+                # Get the area of intent
+                area = int(message.split()[-1]) 
 
-            # Decrease
-            # Lied about rescuing a victim
-            if "Found" in message:
-                area = int(message.split()[-1])
-                if area in intentHistory["Search"]:
-                    trustBeliefs[self._humanName]['competence'] += positive_modifier
-                else:
-                    trustBeliefs[self._humanName]['competence'] += negative_modifier
+                # Increase agent trust in a team member that rescued a victim
+                if 'Collect' in message:
+                    if area in intentHistory["Search"] and area in intentHistory["Found"]:
+                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                    else:
+                        trustBeliefs[self._humanName]['competence'] += negative_modifier
 
-            # Restrict the competence belief to a range of -1 to 1
-            trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+                # Validate if the agent could've found the victim
+                if "Found" in message:
+                    if area in intentHistory["Search"]:
+                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                    else:
+                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+
+                    if 
+
+            else:
+                if "Remove together" in message:
+                    intentHistory["Remove together"].append(Intent(
+                        "Remove together"
+                    ))
+               
+        # Restrict the competence belief to a range of -1 to 1
+        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
 
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
