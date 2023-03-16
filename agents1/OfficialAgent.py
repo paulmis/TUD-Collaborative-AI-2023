@@ -77,6 +77,9 @@ class BaselineAgent(ArtificialBrain):
         # threshold for both willingness and competence values. Values range [-1,1]
         self.trust_threshold = 0
 
+        self.no_easy_rooms_left = False 
+
+
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
         self._state_tracker = StateTracker(agent_id=self.agent_id)
@@ -149,13 +152,11 @@ class BaselineAgent(ArtificialBrain):
         # Send the hidden score message for displaying and logging the score during the task, DO NOT REMOVE THIS
         self._sendMessage('Our score is ' + str(state['rescuebot']['score']) + '.', 'RescueBot')
         # indicates that there are still rooms that can be opened alone by the rescue-bot
-        no_easy_rooms_left = False 
         # Ongoing loop untill the task is terminated, using different phases for defining the agent's behavior
         while True:
             # get willingness and competence value
             willingness = trustBeliefs[self._humanName]["willingness"]
             competence  = trustBeliefs[self._humanName]["competence"]
-
             if Phase.INTRO == self._phase:
                 # Send introduction message
                 self._sendMessage('Hello! My name is RescueBot. Together we will collaborate and try to search and rescue the 8 victims on our right as quickly as possible. \
@@ -243,9 +244,6 @@ class BaselineAgent(ArtificialBrain):
                                    and room['room_name'] not in self._searchedRooms
                                    and room['room_name'] not in self._tosearch]
                 # If all areas have been searched but the task is not finished, start searching areas again
-                if (len(unsearchedRooms) == 0):
-                    no_easy_rooms_left = True # to search hard room (cannot be opened by the rescue-bot alone if any)
-
                 if self._remainingZones and len(unsearchedRooms) == 0:
                     self._tosearch = []
                     self._searchedRooms = []
@@ -254,6 +252,8 @@ class BaselineAgent(ArtificialBrain):
                     self.received_messages_content = []
                     self._sendMessage('Going to re-search all areas.', 'RescueBot')
                     self._phase = Phase.FIND_NEXT_GOAL
+                    self.no_easy_rooms_left = True # to search hard room (cannot be opened by the rescue-bot alone if any)
+
                 # If there are still areas to search, define which one to search next
                 else:
                     # Identify the closest door when the agent did not search any areas yet
@@ -349,7 +349,7 @@ class BaselineAgent(ArtificialBrain):
                             self._waiting = True                          
                         # Determine the next area to explore if the human tells the agent not to remove the obstacle
                         # include time check based on willingness value 
-                        if (no_easy_rooms_left == False and self.ignore_message(willingness)) or \
+                        if (not self.no_easy_rooms_left and self.ignore_message(willingness)) or \
                                 (self.received_messages_content and self.received_messages_content[-1] == 'Continue' and not self._remove):
                             self._answered = True
                             self._waiting = False
