@@ -14,6 +14,7 @@ from matrx.actions.move_actions import MoveNorth
 from matrx.messages.message import Message
 from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
+from .intent import Intent
 
 class Phase(enum.Enum):
     INTRO = 1,
@@ -69,12 +70,20 @@ class BaselineAgent(ArtificialBrain):
         self._rescue = None
         self._recentVic = None
         self._receivedMessages = []
+        self._lastMessage = -1
         self._moving = False
+        self._intentHistory: dict[str, list[Intent]] = {}
+        self._intent_types: list[str] = ["Search", "Found", "Collect", "Remove together"]
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
         self._state_tracker = StateTracker(agent_id=self.agent_id)
         self._navigator = Navigator(agent_id=self.agent_id,action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        
+        # Create action history structure
+        # Intent type to the list of intents
+        for intent_type in self._intent_types:
+            self._intentHistory[intent_type] = []
 
     def filter_observations(self, state):
         # Filtering of the world state before deciding on an action 
@@ -86,16 +95,22 @@ class BaselineAgent(ArtificialBrain):
         for member in state['World']['team_members']:
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
+
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
             for member in self._teamMembers:
                 if mssg.from_id == member and mssg.content not in self._receivedMessages:
                     self._receivedMessages.append(mssg.content)
+
+        # Get the unprocessed messages
+        unprocessed = self._receivedMessages[self._lastMessage + 1:]
+
         # Process messages from team members
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
+        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, unprocessed)
+        self._lastMessage = len(self._receivedMessages) - 1
 
         # Check whether human is close in distance
         if state[{'is_human_agent': True}]:
@@ -674,23 +689,26 @@ class BaselineAgent(ArtificialBrain):
         '''
         process incoming messages received from the team members
         '''
-        
-        receivedMessages = {}
+
         # Create a dictionary with a list of received messages from each team member
+        receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
+                    
         # Check the content of the received messages
         for mssgs in receivedMessages.values():
             for msg in mssgs:
+                
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored
                 if msg.startswith("Search:"):
                     area = 'area ' + msg.split()[-1]
                     if area not in self._searchedRooms:
                         self._searchedRooms.append(area)
+
                 # If a received message involves team members finding victims, add these victims and their locations to memory
                 if msg.startswith("Found:"):
                     # Identify which victim and area it concerns
@@ -714,6 +732,7 @@ class BaselineAgent(ArtificialBrain):
                     # Add the found victim to the to do list when the human's condition is not 'weak'
                     if 'mild' in foundVic and condition!='weak':
                         self._todo.append(foundVic)
+
                 # If a received message involves team members rescuing victims, add these victims and their locations to memory
                 if msg.startswith('Collect:'):
                     # Identify which victim and area it concerns
@@ -737,6 +756,7 @@ class BaselineAgent(ArtificialBrain):
                     # Decide to help the human carry the victim together when the human's condition is weak
                     if condition=='weak':
                         self._rescue = 'together'
+
                 # If a received message involves team members asking for help with removing obstacles, add their location to memory and come over
                 if msg.startswith('Remove:'):
                     # Come over immediately when the agent is not carrying a victim
@@ -763,6 +783,7 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         area = 'area ' + msg.split()[-1]
                         self._sendMessage('Will come to ' + area + ' after dropping ' + self._goalVic + '.','RescueBot')
+
             # Store the current location of the human in memory
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
@@ -801,13 +822,45 @@ class BaselineAgent(ArtificialBrain):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
+        # Base trust belief system variables
+        positive_modifier = 0.1
+        neutral_modifier = 0
+        negative_modifier = -0.1
+
+        print("Processing: " + str(len(receivedMessages)) + " messages")
+
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
-            # Increase agent trust in a team member that rescued a victim
-            if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence']+=0.10
-                # Restrict the competence belief to a range of -1 to 1
-                trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+            print("Processing: ", message)
+            # Remember intentions to execute a search/collect/remove actions
+            intent_type = message.split(":")[0]
+            if any(intent_type in intention_type 
+                   for intention_type in ["Search", "Found", "Collect"]):
+                self._intentHistory[intent_type].append(Intent(
+                    intent_type,
+                    int(message.split()[-1])
+                ))
+
+                # Get the area of intent
+                area = int(message.split()[-1]) 
+
+                # Increase agent trust in a team member that rescued a victim
+                if 'Collect' in message:
+                    if area in intentHistory["Search"] and area in intentHistory["Found"]:
+                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                    else:
+                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+
+                # Validate if the agent could've found the victim
+                if "Found" in message:
+                    if area in intentHistory["Search"]:
+                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                    else:
+                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+
+        # Restrict the competence belief to a range of -1 to 1
+        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)

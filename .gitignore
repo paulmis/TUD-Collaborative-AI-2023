@@ -48,3 +48,5 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/gi
+logs/
+beliefs/currentTrustBelief.csv
