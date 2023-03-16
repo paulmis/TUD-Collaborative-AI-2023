@@ -70,12 +70,20 @@ class BaselineAgent(ArtificialBrain):
         self._rescue = None
         self._recentVic = None
         self._receivedMessages = []
+        self._lastMessage = -1
         self._moving = False
+        self._intentHistory: dict[str, list[Intent]] = {}
+        self._intent_types: list[str] = ["Search", "Found", "Collect", "Remove together"]
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
         self._state_tracker = StateTracker(agent_id=self.agent_id)
         self._navigator = Navigator(agent_id=self.agent_id,action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        
+        # Create action history structure
+        # Intent type to the list of intents
+        for intent_type in self._intent_types:
+            self._intentHistory[intent_type] = []
 
     def filter_observations(self, state):
         # Filtering of the world state before deciding on an action 
@@ -87,16 +95,22 @@ class BaselineAgent(ArtificialBrain):
         for member in state['World']['team_members']:
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
+
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
             for member in self._teamMembers:
                 if mssg.from_id == member and mssg.content not in self._receivedMessages:
                     self._receivedMessages.append(mssg.content)
+
+        # Get the unprocessed messages
+        unprocessed = self._receivedMessages[self._lastMessage + 1:]
+
         # Process messages from team members
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
+        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, unprocessed)
+        self._lastMessage = len(self._receivedMessages) - 1
 
         # Check whether human is close in distance
         if state[{'is_human_agent': True}]:
@@ -808,27 +822,22 @@ class BaselineAgent(ArtificialBrain):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
-
         # Base trust belief system variables
-        intention_types = ["Search", "Found", "Collect", "Remove together"]
         positive_modifier = 0.1
         neutral_modifier = 0
         negative_modifier = -0.1
 
-        # Create action history structure
-        # Intent type to the list of intents
-        intentHistory: dict[str, list[Intent]] = {}
-        for intent_type in intention_types:
-            intentHistory[intent_type] = []
+        print("Processing: " + str(len(receivedMessages)) + " messages")
 
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
+            print("Processing: ", message)
             # Remember intentions to execute a search/collect/remove actions
-            message_type = message.split(":")[0]
-            if any(message_type in intention_type 
+            intent_type = message.split(":")[0]
+            if any(intent_type in intention_type 
                    for intention_type in ["Search", "Found", "Collect"]):
-                intentHistory[message_type].append(Intent(
-                    message_type,
+                self._intentHistory[intent_type].append(Intent(
+                    intent_type,
                     int(message.split()[-1])
                 ))
 
@@ -849,14 +858,6 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         trustBeliefs[self._humanName]['competence'] += negative_modifier
 
-                    if 
-
-            else:
-                if "Remove together" in message:
-                    intentHistory["Remove together"].append(Intent(
-                        "Remove together"
-                    ))
-               
         # Restrict the competence belief to a range of -1 to 1
         trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
 

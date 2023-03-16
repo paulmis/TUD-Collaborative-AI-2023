@@ -81,9 +81,6 @@ class ArtificialAgentBrain(AgentBrain):
         self.received_messages = []
         self.received_messages_content = []
 
-        # List of messages that haven't been processed yet
-        self.unprocessed_messages = []
-
         # Filled by the WorldFactory during self.factory_initialise()
         self.agent_id = None
         self.agent_name = None
@@ -118,7 +115,6 @@ class ArtificialAgentBrain(AgentBrain):
         self.previous_action = None
         self.previous_action_result = None
         self.messages_to_send = []
-        self.unprocessed_messages = []
         self.received_messages = []
         self.received_messages_content = []
         self._init_state()
@@ -598,7 +594,6 @@ class ArtificialAgentBrain(AgentBrain):
             received_message = mssg.content
 
             # Add the message object to the received messages
-            self.unprocessed_messages.append(mssg)
             self.received_messages.append(mssg)
             self.received_messages_content.append(mssg.content)
 
