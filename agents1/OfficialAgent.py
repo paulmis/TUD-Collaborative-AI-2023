@@ -69,7 +69,6 @@ class BaselineAgent(ArtificialBrain):
         self._rescue = None
         self._recentVic = None
         self._receivedMessages = []
-        self.processedMessages = []
         self._moving = False
 
     def initialize(self):
@@ -675,7 +674,7 @@ class BaselineAgent(ArtificialBrain):
         '''
         process incoming messages received from the team members
         '''
-        
+
         # Create a dictionary with a list of received messages from each team member
         receivedMessages = {}
         for member in teamMembers:
@@ -774,10 +773,6 @@ class BaselineAgent(ArtificialBrain):
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
 
-        # Mark the mesagess as processed
-        self.processed_messages.append(self.received_messages)
-        self.received_messages = []
-
     def _loadBelief(self, members, folder):
         '''
         Loads trust belief values if agent already collaborated with human before, otherwise trust belief values are initialized using default values.
@@ -812,13 +807,41 @@ class BaselineAgent(ArtificialBrain):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
+
+        # Base trust belief system variables
+        intention_types = ["Search", "Found", "Collect"]
+        positive_modifier = 0.1
+        neutral_modifier = 0
+        negative_modifier = -0.1
+
+        # Create action history structure
+        intentHistory: dict[str, list[int]] = {}
+        for intent_type in intention_types:
+            intentHistory[intent_type] = []
+
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
+            # Remember intentions to execute a search/collect/remove actions
+            message_type = message.split(":")[0]
+            if any(message_type in intention_type for intention_type in intention_types):
+                intentHistory[message_type].append(int(message.split()[-1]))
+
             # Increase agent trust in a team member that rescued a victim
             if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence']+=0.10
-                # Restrict the competence belief to a range of -1 to 1
-                trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+                trustBeliefs[self._humanName]['competence'] += positive_modifier
+
+            # Decrease
+            # Lied about rescuing a victim
+            if "Found" in message:
+                area = int(message.split()[-1])
+                if area in intentHistory["Search"]:
+                    trustBeliefs[self._humanName]['competence'] += positive_modifier
+                else:
+                    trustBeliefs[self._humanName]['competence'] += negative_modifier
+
+            # Restrict the competence belief to a range of -1 to 1
+            trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
