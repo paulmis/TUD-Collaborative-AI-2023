@@ -109,7 +109,8 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, unprocessed)
+        self._trustBelief(state['World']['nr_ticks'], self._teamMembers, 
+                          trustBeliefs, self._folder, unprocessed)
         self._lastMessage = len(self._receivedMessages) - 1
 
         # Check whether human is close in distance
@@ -818,20 +819,19 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
-    def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+    def _trustBelief(self, tick, members, trustBeliefs, folder, receivedMessages):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # Base trust belief system variables
-        positive_modifier = 0.1
-        neutral_modifier = 0
-        negative_modifier = -0.1
-
-        print("Processing: " + str(len(receivedMessages)) + " messages")
-
+        positive_modifier: float = 0.1
+        neutral_modifier: float = 0
+        negative_modifier: float = -0.1
+        beliefs = trustBeliefs[self._humanName]
+        print(tick, beliefs)
+        
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
-            print("Processing: ", message)
             # Remember intentions to execute a search/collect/remove actions
             intent_type = message.split(":")[0]
             if any(intent_type in intention_type 
@@ -846,26 +846,26 @@ class BaselineAgent(ArtificialBrain):
 
                 # Increase agent trust in a team member that rescued a victim
                 if 'Collect' in message:
-                    if area in intentHistory["Search"] and area in intentHistory["Found"]:
-                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                    if  area in intentHistory["Found"]:
+                        beliefs['competence'] += positive_modifier
                     else:
-                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+                        beliefs['competence'] += negative_modifier
 
                 # Validate if the agent could've found the victim
                 if "Found" in message:
                     if area in intentHistory["Search"]:
-                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                        beliefs['competence'] += positive_modifier
                     else:
-                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+                        beliefs['competence'] += negative_modifier
 
         # Restrict the competence belief to a range of -1 to 1
-        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+        beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
 
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
-            csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
+            csv_writer.writerow([self._humanName, beliefs['competence'], beliefs['willingness']])
 
         return trustBeliefs
 
