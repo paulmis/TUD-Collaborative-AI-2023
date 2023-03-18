@@ -73,7 +73,8 @@ class BaselineAgent(ArtificialBrain):
         self._lastMessage = -1
         self._moving = False
         self._intentHistory: dict[str, list[Intent]] = {}
-        self._intent_types: list[str] = ["Search", "Found", "Collect", "Remove together"]
+        self._intent_types: list[str] = ["Search", "Found", "Collect", 
+                                         "Remove together", "Rescue together"]
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -819,16 +820,14 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
+    def adjust(self, beliefs, competence, willingness, reverse_if)
+    
     def _trustBelief(self, tick, members, trustBeliefs, folder, receivedMessages):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # Base trust belief system variables
-        positive_modifier: float = 0.1
-        neutral_modifier: float = 0
-        negative_modifier: float = -0.1
         beliefs = trustBeliefs[self._humanName]
-        print(tick, beliefs)
         
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
@@ -836,20 +835,19 @@ class BaselineAgent(ArtificialBrain):
             intent_type = message.split(":")[0]
             if any(intent_type in intention_type 
                    for intention_type in ["Search", "Found", "Collect"]):
+                
+                # Save the intent
                 self._intentHistory[intent_type].append(Intent(
                     intent_type,
-                    int(message.split()[-1])
+                    target=int(message.split()[-1])
                 ))
 
                 # Get the area of intent
                 area = int(message.split()[-1]) 
 
-                # Increase agent trust in a team member that rescued a victim
-                if 'Collect' in message:
-                    if  area in intentHistory["Found"]:
-                        beliefs['competence'] += positive_modifier
-                    else:
-                        beliefs['competence'] += negative_modifier
+                # Increase willingness when the team member searches for a victim
+                if 'Search' in message:
+                    beliefs['willingness'] += 0.05
 
                 # Validate if the agent could've found the victim
                 if "Found" in message:
@@ -858,8 +856,51 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         beliefs['competence'] += negative_modifier
 
-        # Restrict the competence belief to a range of -1 to 1
+                # Increase agent trust in a team member that rescued a victim
+                if 'Collect' in message:
+                    if area in intentHistory["Found"]:
+                        beliefs['competence'] += 0.1
+                    else:
+                        beliefs['competence'] -= 0.1
+
+            # Increase willingness when the team member asks for help to
+            # remove an obstacle
+            if 'Help remove' in message:
+                beliefs['willingness'] += 0.05
+
+            # Log together intents
+            for intent in ['Remove together', 'Rescue together']:
+                if intent in message:
+                    beliefs['wonllingness'] += 0.05
+                    self._intentHistory[intent].append(Intent(
+                        intent,
+                        time=tick,
+                        target=self._recentVic
+                    ))
+
+        # Log removal events
+        if self._remove:
+            for intent in self._intentHistory['Remove together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intnet.fulfilledTime < 66:
+                        beliefs['competence'] += 0.2
+                    else:
+                        beliefs['competence'] -= 0.2
+
+        # Log rescue events
+        if self._rescue:
+            for intent in self._intentHistory['Rescue together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intent.fulfilledTime < 66:
+                        beliefs['competence'] += 0.2
+                    else:
+                        beliefs['competence'] -= 0.2
+
+        # Restrict the beliefs to a range of -1 to 1
         beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
+        beliefs['willingness'] = np.clip(beliefs['willingness'], -1, 1)
 
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
