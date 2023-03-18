@@ -839,6 +839,7 @@ class BaselineAgent(ArtificialBrain):
                 # Save the intent
                 self._intentHistory[intent_type].append(Intent(
                     intent_type,
+                    time=tick,
                     target=int(message.split()[-1])
                 ))
 
@@ -863,20 +864,20 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         beliefs['competence'] -= 0.1
 
-            # Increase willingness when the team member asks for help to
-            # remove an obstacle
-            if 'Help remove' in message:
-                beliefs['willingness'] += 0.05
-
             # Log together intents
             for intent in ['Remove together', 'Rescue together']:
                 if intent in message:
-                    beliefs['wonllingness'] += 0.05
+                    beliefs['wonllingness'] += 0.2
                     self._intentHistory[intent].append(Intent(
                         intent,
                         time=tick,
                         target=self._recentVic
                     ))
+
+            # Log alone events
+            for intent in ['Remove alone', 'Rescue alone']:
+                if intent in message:
+                    beliefs['willingness'] -= 0.2
 
         # Log removal events
         if self._remove:
@@ -884,9 +885,9 @@ class BaselineAgent(ArtificialBrain):
                 if intent.fulfilledTime is None:
                     intent.fulfilledTime = tick
                     if tick - intnet.fulfilledTime < 66:
-                        beliefs['competence'] += 0.2
+                        beliefs['competence'] += 0.1
                     else:
-                        beliefs['competence'] -= 0.2
+                        beliefs['competence'] -= 0.1
 
         # Log rescue events
         if self._rescue:
@@ -894,9 +895,9 @@ class BaselineAgent(ArtificialBrain):
                 if intent.fulfilledTime is None:
                     intent.fulfilledTime = tick
                     if tick - intent.fulfilledTime < 66:
-                        beliefs['competence'] += 0.2
+                        beliefs['competence'] += 0.4 if "critical" in self._goalVictim else 0.2
                     else:
-                        beliefs['competence'] -= 0.2
+                        beliefs['competence'] -= 0.4 if "critical" in self._goalVictim else 0.2
 
         # Restrict the beliefs to a range of -1 to 1
         beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
