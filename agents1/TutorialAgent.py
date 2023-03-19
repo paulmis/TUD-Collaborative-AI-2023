@@ -89,6 +89,7 @@ class TutorialAgent(ArtificialBrain):
         return state
 
     def decide_on_actions(self, state):
+
         # Identify team members
         agent_name = state[self.agent_id]['obj_id']
         for member in state['World']['team_members']:

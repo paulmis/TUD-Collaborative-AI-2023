@@ -14,6 +14,7 @@ from matrx.actions.move_actions import MoveNorth
 from matrx.messages.message import Message
 from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
+from .intent import Intent
 
 class Phase(enum.Enum):
     INTRO = 1,
@@ -69,6 +70,7 @@ class BaselineAgent(ArtificialBrain):
         self._rescue = None
         self._recentVic = None
         self._receivedMessages = []
+        self._lastMessage = -1
         self._moving = False
         # ticks 
         self.ticks = 0
@@ -79,11 +81,19 @@ class BaselineAgent(ArtificialBrain):
 
         self.no_easy_rooms_left = False 
 
+        self._intentHistory: dict[str, list[Intent]] = {}
+        self._intent_types: list[str] = ["Search", "Found", "Collect", 
+                                         "Remove together", "Rescue together"]
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
         self._state_tracker = StateTracker(agent_id=self.agent_id)
         self._navigator = Navigator(agent_id=self.agent_id,action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        
+        # Create action history structure
+        # Intent type to the list of intents
+        for intent_type in self._intent_types:
+            self._intentHistory[intent_type] = []
 
     def filter_observations(self, state):
         # Filtering of the world state before deciding on an action 
@@ -104,16 +114,23 @@ class BaselineAgent(ArtificialBrain):
         for member in state['World']['team_members']:
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
+
         # Create a list of received messages from the human team member
         for mssg in self.received_messages:
             for member in self._teamMembers:
                 if mssg.from_id == member and mssg.content not in self._receivedMessages:
                     self._receivedMessages.append(mssg.content)
+
+        # Get the unprocessed messages
+        unprocessed = self._receivedMessages[self._lastMessage + 1:]
+
         # Process messages from team members
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, self._receivedMessages)
+        self._trustBelief(state['World']['nr_ticks'], self._teamMembers, 
+                          trustBeliefs, self._folder, unprocessed)
+        self._lastMessage = len(self._receivedMessages) - 1
 
         # Check whether human is close in distance
         if state[{'is_human_agent': True}]:
@@ -604,6 +621,16 @@ class BaselineAgent(ArtificialBrain):
                     self._todo.append(self._recentVic)
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
+                # Make a plan to rescue the mildly injured victim alone if the human decides so, and communicate this to the human
+                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' and 'mild' in self._recentVic:
+                    self._sendMessage('Picking up ' + self._recentVic + ' in ' + self._door['room_name'] + '.','RescueBot')
+                    self._rescue = 'alone'
+                    self._answered = True
+                    self._waiting = False
+                    self._goalVic = self._recentVic
+                    self._goalLoc = self._remaining[self._goalVic]
+                    self._recentVic = None
+                    self._phase = Phase.PLAN_PATH_TO_VICTIM
                 # Remain idle untill the human communicates to the agent what to do with the found victim
                 if self.received_messages_content and self._waiting and self.received_messages_content[-1] != 'Rescue' and self.received_messages_content[-1] != 'Continue':
                     return None, {}
@@ -721,23 +748,26 @@ class BaselineAgent(ArtificialBrain):
         '''
         process incoming messages received from the team members
         '''
-        
-        receivedMessages = {}
+
         # Create a dictionary with a list of received messages from each team member
+        receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
+                    
         # Check the content of the received messages
         for mssgs in receivedMessages.values():
             for msg in mssgs:
+                
                 # If a received message involves team members searching areas, add these areas to the memory of areas that have been explored
                 if msg.startswith("Search:"):
                     area = 'area ' + msg.split()[-1]
                     if area not in self._searchedRooms:
                         self._searchedRooms.append(area)
+
                 # If a received message involves team members finding victims, add these victims and their locations to memory
                 if msg.startswith("Found:"):
                     # Identify which victim and area it concerns
@@ -761,6 +791,7 @@ class BaselineAgent(ArtificialBrain):
                     # Add the found victim to the to do list when the human's condition is not 'weak'
                     if 'mild' in foundVic and condition!='weak':
                         self._todo.append(foundVic)
+
                 # If a received message involves team members rescuing victims, add these victims and their locations to memory
                 if msg.startswith('Collect:'):
                     # Identify which victim and area it concerns
@@ -784,6 +815,7 @@ class BaselineAgent(ArtificialBrain):
                     # Decide to help the human carry the victim together when the human's condition is weak
                     if condition=='weak':
                         self._rescue = 'together'
+
                 # If a received message involves team members asking for help with removing obstacles, add their location to memory and come over
                 if msg.startswith('Remove:'):
                     # Come over immediately when the agent is not carrying a victim
@@ -810,6 +842,7 @@ class BaselineAgent(ArtificialBrain):
                     else:
                         area = 'area ' + msg.split()[-1]
                         self._sendMessage('Will come to ' + area + ' after dropping ' + self._goalVic + '.','RescueBot')
+
             # Store the current location of the human in memory
             if mssgs and mssgs[-1].split()[-1] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 self._humanLoc = int(mssgs[-1].split()[-1])
@@ -844,22 +877,94 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
-    def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+    def adjust(self, beliefs, competence, willingness, reverse_if)
+    
+    def _trustBelief(self, tick, members, trustBeliefs, folder, receivedMessages):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
+        # Base trust belief system variables
+        beliefs = trustBeliefs[self._humanName]
+        
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
-            # Increase agent trust in a team member that rescued a victim
-            if 'Collect' in message:
-                trustBeliefs[self._humanName]['competence']+=0.10
-                # Restrict the competence belief to a range of -1 to 1
-                trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+            # Remember intentions to execute a search/collect/remove actions
+            intent_type = message.split(":")[0]
+            if any(intent_type in intention_type 
+                   for intention_type in ["Search", "Found", "Collect"]):
+                
+                # Save the intent
+                self._intentHistory[intent_type].append(Intent(
+                    intent_type,
+                    time=tick,
+                    target=int(message.split()[-1])
+                ))
+
+                # Get the area of intent
+                area = int(message.split()[-1]) 
+
+                # Increase willingness when the team member searches for a victim
+                if 'Search' in message:
+                    beliefs['willingness'] += 0.05
+
+                # Validate if the agent could've found the victim
+                if "Found" in message:
+                    if area in intentHistory["Search"]:
+                        beliefs['competence'] += positive_modifier
+                    else:
+                        beliefs['competence'] += negative_modifier
+
+                # Increase agent trust in a team member that rescued a victim
+                if 'Collect' in message:
+                    if area in intentHistory["Found"]:
+                        beliefs['competence'] += 0.1
+                    else:
+                        beliefs['competence'] -= 0.1
+
+            # Log together intents
+            for intent in ['Remove together', 'Rescue together']:
+                if intent in message:
+                    beliefs['wonllingness'] += 0.2
+                    self._intentHistory[intent].append(Intent(
+                        intent,
+                        time=tick,
+                        target=self._recentVic
+                    ))
+
+            # Log alone events
+            for intent in ['Remove alone', 'Rescue alone']:
+                if intent in message:
+                    beliefs['willingness'] -= 0.2
+
+        # Log removal events
+        if self._remove:
+            for intent in self._intentHistory['Remove together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intnet.fulfilledTime < 66:
+                        beliefs['competence'] += 0.1
+                    else:
+                        beliefs['competence'] -= 0.1
+
+        # Log rescue events
+        if self._rescue:
+            for intent in self._intentHistory['Rescue together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intent.fulfilledTime < 66:
+                        beliefs['competence'] += 0.4 if "critical" in self._goalVictim else 0.2
+                    else:
+                        beliefs['competence'] -= 0.4 if "critical" in self._goalVictim else 0.2
+
+        # Restrict the beliefs to a range of -1 to 1
+        beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
+        beliefs['willingness'] = np.clip(beliefs['willingness'], -1, 1)
+
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
-            csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
+            csv_writer.writerow([self._humanName, beliefs['competence'], beliefs['willingness']])
 
         return trustBeliefs
 

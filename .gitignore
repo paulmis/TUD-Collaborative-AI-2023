@@ -51,3 +51,5 @@ docs/_build/gi
 
 .DS_Store
 logs/
+logs/
+beliefs/currentTrustBelief.csv
