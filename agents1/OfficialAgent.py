@@ -931,9 +931,9 @@ class BaselineAgent(ArtificialBrain):
                 # Validate if the agent could've found the victim
                 if "Found" in message:
                     if area in self._intentHistory["Search"]:
-                        beliefs['competence'] += positive_modifier
+                        beliefs['competence'] += 0.1
                     else:
-                        beliefs['competence'] += negative_modifier
+                        beliefs['competence'] -= 0.1
 
                 # Increase agent trust in a team member that rescued a victim
                 if 'Collect' in message:
