@@ -179,7 +179,7 @@ class BaselineAgent(ArtificialBrain):
             # get willingness and competence value
             willingness = trustBeliefs[self._humanName]["willingness"]
             competence  = trustBeliefs[self._humanName]["competence"]
-            # print("willingness", willingness, "competence", competence)
+            print("willingness", willingness, "competence", competence)
             
             # use evaluation
             if evaluation is None: # use our trust-mechanism 
@@ -876,12 +876,20 @@ class BaselineAgent(ArtificialBrain):
         '''
         # Create a dictionary with trust values for all team members
         trustBeliefs = {}
+        # first check current trust belief file:
+        with open(folder+'/beliefs/currentTrustBelief.csv') as csvfile:
+            reader = csv.reader(csvfile, delimiter=';', quotechar="'")
+            for row in reader:
+                if row and row[0] == self._humanName:
+                    trustBeliefs[row[0]] = {'competence': float(row[1]), 'willingness': float(row[2])}
+                    return trustBeliefs
+
         # Set a default starting trust value
         default = 0.5
         trustfile_header = []
         trustfile_contents = []
         # Check if agent already collaborated with this human before, if yes: load the corresponding trust values, if no: initialize using default trust values
-        with open(folder+'/beliefs/currentTrustBelief.csv') as csvfile:
+        with open(folder+'/beliefs/allTrustBeliefs.csv') as csvfile:
             reader = csv.reader(csvfile, delimiter=';', quotechar="'")
             for row in reader:
                 if trustfile_header==[]:
@@ -895,7 +903,6 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[name] = {'competence': competence, 'willingness': willingness}
                 # Initialize default trust values
                 if row and row[0]!=self._humanName:
-                    print("init default")
                     competence = default
                     willingness = default
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
