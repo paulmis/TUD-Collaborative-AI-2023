@@ -73,7 +73,8 @@ class BaselineAgent(ArtificialBrain):
         self._lastMessage = -1
         self._moving = False
         self._intentHistory: dict[str, list[Intent]] = {}
-        self._intent_types: list[str] = ["Search", "Found", "Collect", "Remove together"]
+        self._intent_types: list[str] = ["Search", "Found", "Collect", 
+                                         "Remove together", "Rescue together"]
 
     def initialize(self):
         # Initialization of the state tracker and navigation algorithm
@@ -109,7 +110,8 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(self._teamMembers, trustBeliefs, self._folder, unprocessed)
+        self._trustBelief(state['World']['nr_ticks'], self._teamMembers, 
+                          trustBeliefs, self._folder, unprocessed)
         self._lastMessage = len(self._receivedMessages) - 1
 
         # Check whether human is close in distance
@@ -818,54 +820,94 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
-    def _trustBelief(self, members, trustBeliefs, folder, receivedMessages):
+    def adjust(self, beliefs, competence, willingness, reverse_if)
+    
+    def _trustBelief(self, tick, members, trustBeliefs, folder, receivedMessages):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # Base trust belief system variables
-        positive_modifier = 0.1
-        neutral_modifier = 0
-        negative_modifier = -0.1
-
-        print("Processing: " + str(len(receivedMessages)) + " messages")
-
+        beliefs = trustBeliefs[self._humanName]
+        
         # Update the trust value based on for example the received messages
         for message in receivedMessages:
-            print("Processing: ", message)
             # Remember intentions to execute a search/collect/remove actions
             intent_type = message.split(":")[0]
             if any(intent_type in intention_type 
                    for intention_type in ["Search", "Found", "Collect"]):
+                
+                # Save the intent
                 self._intentHistory[intent_type].append(Intent(
                     intent_type,
-                    int(message.split()[-1])
+                    time=tick,
+                    target=int(message.split()[-1])
                 ))
 
                 # Get the area of intent
                 area = int(message.split()[-1]) 
 
-                # Increase agent trust in a team member that rescued a victim
-                if 'Collect' in message:
-                    if area in intentHistory["Search"] and area in intentHistory["Found"]:
-                        trustBeliefs[self._humanName]['competence'] += positive_modifier
-                    else:
-                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+                # Increase willingness when the team member searches for a victim
+                if 'Search' in message:
+                    beliefs['willingness'] += 0.05
 
                 # Validate if the agent could've found the victim
                 if "Found" in message:
                     if area in intentHistory["Search"]:
-                        trustBeliefs[self._humanName]['competence'] += positive_modifier
+                        beliefs['competence'] += positive_modifier
                     else:
-                        trustBeliefs[self._humanName]['competence'] += negative_modifier
+                        beliefs['competence'] += negative_modifier
 
-        # Restrict the competence belief to a range of -1 to 1
-        trustBeliefs[self._humanName]['competence'] = np.clip(trustBeliefs[self._humanName]['competence'], -1, 1)
+                # Increase agent trust in a team member that rescued a victim
+                if 'Collect' in message:
+                    if area in intentHistory["Found"]:
+                        beliefs['competence'] += 0.1
+                    else:
+                        beliefs['competence'] -= 0.1
+
+            # Log together intents
+            for intent in ['Remove together', 'Rescue together']:
+                if intent in message:
+                    beliefs['wonllingness'] += 0.2
+                    self._intentHistory[intent].append(Intent(
+                        intent,
+                        time=tick,
+                        target=self._recentVic
+                    ))
+
+            # Log alone events
+            for intent in ['Remove alone', 'Rescue alone']:
+                if intent in message:
+                    beliefs['willingness'] -= 0.2
+
+        # Log removal events
+        if self._remove:
+            for intent in self._intentHistory['Remove together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intnet.fulfilledTime < 66:
+                        beliefs['competence'] += 0.1
+                    else:
+                        beliefs['competence'] -= 0.1
+
+        # Log rescue events
+        if self._rescue:
+            for intent in self._intentHistory['Rescue together']:
+                if intent.fulfilledTime is None:
+                    intent.fulfilledTime = tick
+                    if tick - intent.fulfilledTime < 66:
+                        beliefs['competence'] += 0.4 if "critical" in self._goalVictim else 0.2
+                    else:
+                        beliefs['competence'] -= 0.4 if "critical" in self._goalVictim else 0.2
+
+        # Restrict the beliefs to a range of -1 to 1
+        beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
+        beliefs['willingness'] = np.clip(beliefs['willingness'], -1, 1)
 
         # Save current trust belief values so we can later use and retrieve them to add to a csv file with all the logged trust belief values
         with open(folder + '/beliefs/currentTrustBelief.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(['name','competence','willingness'])
-            csv_writer.writerow([self._humanName,trustBeliefs[self._humanName]['competence'],trustBeliefs[self._humanName]['willingness']])
+            csv_writer.writerow([self._humanName, beliefs['competence'], beliefs['willingness']])
 
         return trustBeliefs
 
