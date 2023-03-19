@@ -643,7 +643,8 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Make a plan to rescue the mildly injured victim alone if the human decides so, and communicate this to the human
-                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' and 'mild' in self._recentVic:
+                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue alone' and \
+                        (self._recentVic is not None and 'mild' in self._recentVic):
                     self._sendMessage('Picking up ' + self._recentVic + ' in ' + self._door['room_name'] + '.','RescueBot')
                     self._rescue = 'alone'
                     self._answered = True
