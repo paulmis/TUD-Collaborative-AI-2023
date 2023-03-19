@@ -82,7 +82,7 @@ class BaselineAgent(ArtificialBrain):
         # idle time
         self.idle_since = 0 
         # threshold for both willingness and competence values. Values range [-1,1]
-        self.trust_threshold = 0
+        self.trust_threshold = -0.3
 
         self.no_easy_rooms_left = False 
 
