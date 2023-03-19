@@ -877,7 +877,8 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
         return trustBeliefs
 
-    def adjust(self, beliefs, competence, willingness, reverse_if)
+    def adjust(self, beliefs, competence, willingness, reverse_if):
+        pass
     
     def _trustBelief(self, tick, members, trustBeliefs, folder, receivedMessages):
         '''
