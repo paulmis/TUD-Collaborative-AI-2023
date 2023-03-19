@@ -619,7 +619,8 @@ class BaselineAgent(ArtificialBrain):
                     self._recentVic = None
                     self._phase = Phase.FIND_NEXT_GOAL
                 # Make a plan to rescue a found mildly injured victim together if the human decides so
-                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue together' and 'mild' in self._recentVic:
+                if self.received_messages_content and self.received_messages_content[-1] == 'Rescue together' and \
+                        (self._recentVic is not None and 'mild' in self._recentVic):
                     self._rescue = 'together'
                     self._answered = True
                     self._waiting = False
