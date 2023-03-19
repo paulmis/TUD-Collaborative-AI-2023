@@ -193,7 +193,7 @@ class BaselineAgent(ArtificialBrain):
                 willingness = 1 if random.randint(0,1) == 0 else -1
                 competence = 1 if random.randint(0,1) == 0 else -1 
             
-            print(competence, willingness)
+            # print(competence, willingness)
             if Phase.INTRO == self._phase:
                 # Send introduction message
                 self._sendMessage('Hello! My name is RescueBot. Together we will collaborate and try to search and rescue the 8 victims on our right as quickly as possible. \
