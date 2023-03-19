@@ -984,9 +984,9 @@ class BaselineAgent(ArtificialBrain):
                 if intent.fulfilledTime is None:
                     intent.fulfilledTime = tick
                     if tick - intent.fulfilledTime < 66:
-                        beliefs['competence'] += 0.4 if "critical" in self._goalVic else 0.2
+                        beliefs['competence'] += 0.4 if (self._goalVic is not None and "critical" in self._goalVic) else 0.2
                     else:
-                        beliefs['competence'] -= 0.4 if "critical" in self._goalVic else 0.2
+                        beliefs['competence'] -= 0.4 if (self._goalVic is not None and "critical" in self._goalVic) else 0.2
 
         # Restrict the beliefs to a range of -1 to 1
         beliefs['competence'] = np.clip(beliefs['competence'], -1, 1)
