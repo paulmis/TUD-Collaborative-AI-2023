@@ -16,8 +16,8 @@ from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
 from .intent import Intent
 
-evaluation = None           # use our trust-mechanism 
-# evaluation = "NEVER-TRUST"  # use never trust-mechanism
+# evaluation = None           # use our trust-mechanism 
+evaluation = "NEVER-TRUST"  # use never trust-mechanism
 # evaluation = "ALWAYS-TRUST" # use always trust-mechanism
 # evaluation = "RANDOM-TRUST" # use random trust-mechanism 
 
