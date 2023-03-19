@@ -17,8 +17,8 @@ from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, Dr
 from .intent import Intent
 
 # evaluation = None           # use our trust-mechanism 
-evaluation = "NEVER-TRUST"  # use never trust-mechanism
-# evaluation = "ALWAYS-TRUST" # use always trust-mechanism
+# evaluation = "NEVER-TRUST"  # use never trust-mechanism
+evaluation = "ALWAYS-TRUST" # use always trust-mechanism
 # evaluation = "RANDOM-TRUST" # use random trust-mechanism 
 
 class Phase(enum.Enum):
@@ -963,7 +963,7 @@ class BaselineAgent(ArtificialBrain):
             for intent in self._intentHistory['Remove together']:
                 if intent.fulfilledTime is None:
                     intent.fulfilledTime = tick
-                    if tick - intnet.fulfilledTime < 66:
+                    if tick - intent.fulfilledTime < 66:
                         beliefs['competence'] += 0.1
                     else:
                         beliefs['competence'] -= 0.1
