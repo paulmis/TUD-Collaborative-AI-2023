@@ -945,7 +945,7 @@ class BaselineAgent(ArtificialBrain):
             # Log together intents
             for intent in ['Remove together', 'Rescue together']:
                 if intent in message:
-                    beliefs['wonllingness'] += 0.2
+                    beliefs['willingness'] += 0.2
                     self._intentHistory[intent].append(Intent(
                         intent,
                         time=tick,
