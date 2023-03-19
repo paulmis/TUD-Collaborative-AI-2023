@@ -19,4 +19,4 @@ class ActionLogger(GridWorldLogger):
             log_data[agent_id + '_action'] = agent_body.current_action
             log_data[agent_id + '_location'] = agent_body.location
                 
-        return log_dat
+        return log_data

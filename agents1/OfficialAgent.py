@@ -16,6 +16,11 @@ from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
 from .intent import Intent
 
+evaluation = None           # use our trust-mechanism 
+# evaluation = "NEVER-TRUST"  # use never trust-mechanism
+# evaluation = "ALWAYS-TRUST" # use always trust-mechanism
+# evaluation = "RANDOM-TRUST" # use random trust-mechanism 
+
 class Phase(enum.Enum):
     INTRO = 1,
     FIND_NEXT_GOAL = 2,
@@ -174,6 +179,21 @@ class BaselineAgent(ArtificialBrain):
             # get willingness and competence value
             willingness = trustBeliefs[self._humanName]["willingness"]
             competence  = trustBeliefs[self._humanName]["competence"]
+            
+            # use evaluation
+            if evaluation is None: # use our trust-mechanism 
+                pass
+            elif evaluation == "NEVER-TRUST":
+                willingness = -1 
+                competence = -1
+            elif evaluation == "ALWAYS-TRUST":
+                willingness = 1
+                competence = 1
+            else:
+                willingness = 1 if random.randint(0,1) == 0 else -1
+                competence = 1 if random.randint(0,1) == 0 else -1 
+            
+            print(competence, willingness)
             if Phase.INTRO == self._phase:
                 # Send introduction message
                 self._sendMessage('Hello! My name is RescueBot. Together we will collaborate and try to search and rescue the 8 victims on our right as quickly as possible. \
