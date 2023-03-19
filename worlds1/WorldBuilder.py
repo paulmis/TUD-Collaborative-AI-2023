@@ -341,7 +341,7 @@ class CollectionGoal(WorldGoal):
     '''
     def __init__(self, max_nr_ticks):
         super().__init__()
-        self.max_nr_ticks = max_nr_ticks
+        self.max_nr_ticks = 10000
         self.__drop_off= {}
         self.__drop_off_zone = {}
         self.__progress = 0

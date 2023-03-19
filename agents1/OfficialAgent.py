@@ -16,9 +16,9 @@ from matrx.messages.message_manager import MessageManager
 from actions1.CustomActions import RemoveObjectTogether, CarryObjectTogether, DropObjectTogether, CarryObject, Drop
 from .intent import Intent
 
-# evaluation = None           # use our trust-mechanism 
+evaluation = None           # use our trust-mechanism 
 # evaluation = "NEVER-TRUST"  # use never trust-mechanism
-evaluation = "ALWAYS-TRUST" # use always trust-mechanism
+# evaluation = "ALWAYS-TRUST" # use always trust-mechanism
 # evaluation = "RANDOM-TRUST" # use random trust-mechanism 
 
 class Phase(enum.Enum):
@@ -133,7 +133,7 @@ class BaselineAgent(ArtificialBrain):
         self._processMessages(state, self._teamMembers, self._condition)
         # Initialize and update trust beliefs for team members
         trustBeliefs = self._loadBelief(self._teamMembers, self._folder)
-        self._trustBelief(state['World']['nr_ticks'], self._teamMembers, 
+        trustBeliefs = self._trustBelief(state['World']['nr_ticks'], self._teamMembers, 
                           trustBeliefs, self._folder, unprocessed)
         self._lastMessage = len(self._receivedMessages) - 1
 
@@ -179,6 +179,7 @@ class BaselineAgent(ArtificialBrain):
             # get willingness and competence value
             willingness = trustBeliefs[self._humanName]["willingness"]
             competence  = trustBeliefs[self._humanName]["competence"]
+            # print("willingness", willingness, "competence", competence)
             
             # use evaluation
             if evaluation is None: # use our trust-mechanism 
@@ -205,7 +206,7 @@ class BaselineAgent(ArtificialBrain):
                     self._phase = Phase.FIND_NEXT_GOAL
                 else:
                     return None, {}
-
+            # does not depend on trust-belief
             if Phase.FIND_NEXT_GOAL == self._phase:
                 # Definition of some relevant variables
                 self._answered = False
@@ -453,8 +454,8 @@ class BaselineAgent(ArtificialBrain):
                             self._waiting = True
                         # Determine the next area to explore if the human tells the agent not to remove the obstacle    
                         # include time check based on willingness value       
-                        if self.ignore_message(willingness) or \
-                                self.received_messages_content and self.received_messages_content[-1] == 'Continue' and not self._remove:
+                        if (not self.no_easy_rooms_left and self.ignore_message(willingness)) or \
+                                (self.received_messages_content and self.received_messages_content[-1] == 'Continue' and not self._remove):
                             self._answered = True
                             self._waiting = False
                             # Add area to the to do list
@@ -880,7 +881,7 @@ class BaselineAgent(ArtificialBrain):
         trustfile_header = []
         trustfile_contents = []
         # Check if agent already collaborated with this human before, if yes: load the corresponding trust values, if no: initialize using default trust values
-        with open(folder+'/beliefs/allTrustBeliefs.csv') as csvfile:
+        with open(folder+'/beliefs/currentTrustBelief.csv') as csvfile:
             reader = csv.reader(csvfile, delimiter=';', quotechar="'")
             for row in reader:
                 if trustfile_header==[]:
@@ -894,6 +895,7 @@ class BaselineAgent(ArtificialBrain):
                     trustBeliefs[name] = {'competence': competence, 'willingness': willingness}
                 # Initialize default trust values
                 if row and row[0]!=self._humanName:
+                    print("init default")
                     competence = default
                     willingness = default
                     trustBeliefs[self._humanName] = {'competence': competence, 'willingness': willingness}
@@ -926,7 +928,7 @@ class BaselineAgent(ArtificialBrain):
                 # Get the area of intent
                 area = int(message.split()[-1]) 
 
-                # Increase willingness when the team member searches for a victim
+                #  by
                 if 'Search' in message:
                     beliefs['willingness'] += 0.05
 
@@ -989,6 +991,9 @@ class BaselineAgent(ArtificialBrain):
             csv_writer.writerow(['name','competence','willingness'])
             csv_writer.writerow([self._humanName, beliefs['competence'], beliefs['willingness']])
 
+        # update 
+        trustBeliefs[self._humanName] = beliefs
+        # result
         return trustBeliefs
 
     def _sendMessage(self, mssg, sender):
